@@ -1,0 +1,167 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Home</title>
+        <style type="text/css">
+            body {
+                display: flex;
+                flex-direction: row;
+                justify-content: center;
+                overflow-y: hidden;
+                align-items: center;
+                height: 100vh;
+                background-color: #f1f1f1;
+            }
+            .container {
+                width: 80%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            .get-image {
+                width: 100%;
+                overflow: hidden;
+            }
+            .get-image img {
+                width: 100%;
+                height: auto;
+                object-fit: contain;
+                display: block; 
+            }
+            .controls {
+                width: 100%;
+                display: flex;
+                justify-content: center; 
+                padding-top: 20px;
+            }
+            .main-content {
+                display: flex;
+                width: 100%;
+                height: 100vh;
+            }
+            .object {
+                width: 20%;
+                overflow-y: auto; 
+                background-color: #fff;
+                border-left: 1px solid #ddd;
+                padding-left: 10px;
+            }
+            .object-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            .hide{
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="main-content">
+            <div class="container">
+                <div class="get-image">
+                    <img id="image" src="/get-image" alt="image1">
+                </div>
+                <div class="controls">
+                    <button id="zoom-in">Zoom In</button>
+                    <button id="zoom-out">Zoom Out</button>
+                    <button id="draw">Draw</button>
+                    <button id="end-drawing"  class="hide">End Drawing</button>
+                </div>
+            </div>
+            <div class="object">
+                <div class="object-header">Objects</div>
+                <ul class="object-list"></ul>
+            </div>
+        </div>
+
+        <script>
+            const imageElement = document.getElementById('image');
+            const zoomInButton = document.getElementById('zoom-in');
+            const zoomOutButton = document.getElementById('zoom-out');
+            const drawButton = document.getElementById('draw');
+            const endDrawingButton = document.getElementById('end-drawing');
+            const objectList = document.querySelector('.object-list');
+            
+            let drawing = false;
+            let points = [];
+            let firstPoint = null;
+
+            function reloadImage() {
+                const timestamp = new Date().getTime();
+                imageElement.src = '/get-image?timestamp=' + timestamp;
+            }
+
+            // Zoom In
+            zoomInButton.addEventListener('click', () => {
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: true })
+                }).then(reloadImage);
+            });
+
+            // Zoom Out
+            zoomOutButton.addEventListener('click', () => {
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: false })
+                }).then(reloadImage);
+            });
+
+            // Start Drawing
+            drawButton.addEventListener('click', () => {
+                drawing = true;
+                points = [];
+                firstPoint = null;
+                imageElement.style.cursor = 'crosshair';
+            });
+
+            // End Drawing
+            endDrawingButton.addEventListener('click', () => {
+                if (points.length > 2) {
+                    fetch('/draw', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ points })
+                    }).then(() => {
+                        const li = document.createElement('li');
+                        li.textContent = `Object: ${points.map(p => `(${p.x.toFixed(0)}, ${p.y.toFixed(0)})`).join(', ')}`;
+                        objectList.appendChild(li);
+                        resetDrawing();
+                        reloadImage();
+                    });
+                } else {
+                    alert('Please draw more points to define an object.');
+                }
+            });
+
+            // Handle Image Click
+            imageElement.addEventListener('click', (e) => {
+                if (drawing) {
+                    const rect = imageElement.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    points.push({ x, y });
+
+                    if (firstPoint === null) {
+                        firstPoint = { x, y };
+                    } else if (Math.hypot(x - firstPoint.x, y - firstPoint.y) < 10) {
+                        endDrawingButton.click();
+                    }
+                }
+            });
+
+            function resetDrawing() {
+                drawing = false;
+                points = [];
+                firstPoint = null;
+                imageElement.style.cursor = 'default';
+            }
+        </script>
+    </body>
+    </html>
