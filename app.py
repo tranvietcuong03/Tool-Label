@@ -3,6 +3,7 @@ import pandas as pd
 import cv2
 import io
 import os
+import json
 
 app = Flask(__name__)
 
@@ -29,6 +30,10 @@ def user_home(user_id):
         return render_template('home.html', user_id=user_id)
     else:
         return "User ID not found", 404
+    
+
+# File to store the polygons data
+    
 all_object_polygon = []
 scale = 0.5
 object_points = []
@@ -52,13 +57,47 @@ def zoom():
 
     return ('', 204)
 
+# json file
+POLYGON_FILE = 'polygons.json'
+imageHeight = None
+imageWidth = None
+def load_polygons():
+    global all_object_polygon, imageWidth, imageHeight 
+    if os.path.exists(POLYGON_FILE):
+        with open(POLYGON_FILE, 'r') as file:
+            data = json.load(file)
+            all_object_polygon = data['objects']
+
+            imageHeight = data['imageHeight']
+            imageWidth = data['imageWidth']
+
+def save_polygons():
+    global all_object_polygon, imageWidth, imageHeight
+    data = {
+        'objects': all_object_polygon,
+        'imageHeight': imageHeight,  # Use your actual image height
+        'imageWidth': imageHeight    # Use your actual image width
+    }
+    with open(POLYGON_FILE, 'w') as file:
+        json.dump(data, file)
+
+
 @app.route('/toggle-draw', methods=['POST'])
 def toggle_draw():
-    global drawing_mode
+    global drawing_mode, all_object_polygon, object_points
     drawing_mode = request.json.get('drawing_mode', False)
     if not drawing_mode:
-        all_object_polygon.append(object_points)
-        object_points.clear()  # Clear points when ending drawing
+        all_object_polygon.append({
+            'label': "MyLable",
+            'points': object_points
+        })
+        object_points = []  # Clear points when ending drawing
+    return ('', 204)
+
+@app.route('/submit-polygons', methods=['POST'])
+def save_polygons_route():
+    global all_object_polygon
+    save_polygons()
     return ('', 204)
 
 @app.route('/draw', methods=['POST'])
@@ -91,38 +130,43 @@ def is_near_first_point(last_point, first_point, threshold=10):
     return distance < threshold
 
 def plot_coordinates_on_image():
-    global object_points, scale
+    global all_object_polygon, scale
 
     img = cv2.imread(image_path)
     if img is None:
         raise FileNotFoundError("Image file not found.")
 
     img_resized = cv2.resize(img, (0, 0), fx=scale, fy=scale)
-
-    if object_points:
-        first_point = object_points[0]
-        for i, point in enumerate(object_points):
-            x_resized = int(point['x'] * scale)
-            y_resized = int(point['y'] * scale)
-
-            # Draw a larger, filled circle to make the points "pop out"
-            cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0, 255), -1)  # Red points
-
-            if i > 0:
-                prev_point = object_points[i - 1]
-                prev_x_resized = int(prev_point['x'] * scale)
-                prev_y_resized = int(prev_point['y'] * scale)
-                cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)  # Green line
-
-        # If the last point is near the first point, connect them
-        last_point = object_points[-1]
-        if is_near_first_point(last_point, first_point):
-            first_x_resized = int(first_point['x'] * scale)
-            first_y_resized = int(first_point['y'] * scale)
-            last_x_resized = int(last_point['x'] * scale)
-            last_y_resized = int(last_point['y'] * scale)
-            cv2.line(img_resized, (last_x_resized, last_y_resized), (first_x_resized, first_y_resized), (255, 0, 0), 2)  # Blue closing line
-
+    for object in all_object_polygon:
+        object_points = object['points']
+        if object_points:
+            first_point = object_points[0]
+            object_points.append(first_point)
+            for i, point in enumerate(object_points):
+                x_resized = int(point['x'] * scale)
+                y_resized = int(point['y'] * scale)
+    
+                # Draw a larger, filled circle to make the points "pop out"
+                cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0, 255), -1)  # Red points
+    
+                if i > 0 and i < len(object_points):
+                    prev_point = object_points[i - 1]
+                    prev_x_resized = int(prev_point['x'] * scale)
+                    prev_y_resized = int(prev_point['y'] * scale)
+                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)  # Green line
+                
+    
+            # If the last point is near the first point, connect them
+            # last_point = object_points[-1]
+            # if is_near_first_point(last_point, first_point):
+            #     print(first_point,'--------------------------------')
+            #     object_points.append(first_point)
+            #     first_x_resized = int(first_point['x'] * scale)
+            #     first_y_resized = int(first_point['y'] * scale)
+            #     last_x_resized = int(last_point['x'] * scale)
+            #     last_y_resized = int(last_point['y'] * scale)
+            #     cv2.line(img_resized, (last_x_resized, last_y_resized), (first_x_resized, first_y_resized), (255, 0, 0), 2)  # Blue closing line
+   
     _, buffer = cv2.imencode('.png', img_resized)
     buf = io.BytesIO(buffer)
     return buf
@@ -130,16 +174,23 @@ def plot_coordinates_on_image():
 @app.route('/delete-last', methods=['POST'])
 def delete_last_point():
     global object_points, drawing_mode
-
     if drawing_mode and object_points:
         object_points.pop()  
-
     return ('', 204) 
 
 @app.route('/get-objects', methods=['GET'])
 def get_objects():
     global all_object_polygon
     return jsonify(all_object_polygon)
+
+@app.route('/delete-object/<int:index>', methods=['DELETE'])
+def delete_object(index):
+    global all_object_polygon
+    if 0 <= index < len(all_object_polygon):
+        del all_object_polygon[index]
+        save_polygons()
+        return '', 204  # No Content
+    return '', 404  # Not Found
 
 if __name__ == '__main__':
     app.run(debug=True)

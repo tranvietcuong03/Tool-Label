@@ -26,6 +26,21 @@
         #object-header{
             text-align: center;
         }
+        #btn{
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+        .btn-child{
+            padding: 5px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #000;
+        }
+        .btn-child:hover{
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -43,6 +58,10 @@
         <canvas id="imageCanvas"></canvas>
     
         <div id="right-bar">
+            <div id="btn">
+                <div class="btn-child" id="req">Request</div>
+                <div class="btn-child" id="submit">Submit</div>
+            </div>
             <h2 id="object-header">Objects</h2>
             <ul id="object-list"></ul>
         </div> 
@@ -57,7 +76,7 @@
         let points = [];
         const threshold = 10;  // Adjust threshold value as needed
         
-        updateObjectList()
+        updateObjectList();
         function loadImage() {
             fetch('/get-image')
                 .then(response => response.blob())
@@ -158,6 +177,21 @@
                     });
                 });     
         }
+
+        document.getElementById('submit').addEventListener('click', () => {
+            fetch('/submit-polygons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert('Polygons saved successfully!');
+                } else {
+                    alert('Failed to save polygons.');
+                }
+            });
+        });
+
 
         document.getElementById('zoom-in').addEventListener('click', () => {
             fetch('/zoom', {
