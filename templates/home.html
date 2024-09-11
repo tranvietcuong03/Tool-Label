@@ -1,167 +1,224 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Home</title>
-        <style type="text/css">
-            body {
-                display: flex;
-                flex-direction: row;
-                justify-content: center;
-                overflow-y: hidden;
-                align-items: center;
-                height: 100vh;
-                background-color: #f1f1f1;
-            }
-            .container {
-                width: 80%;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-            .get-image {
-                width: 100%;
-                overflow: hidden;
-            }
-            .get-image img {
-                width: 100%;
-                height: auto;
-                object-fit: contain;
-                display: block; 
-            }
-            .controls {
-                width: 100%;
-                display: flex;
-                justify-content: center; 
-                padding-top: 20px;
-            }
-            .main-content {
-                display: flex;
-                width: 100%;
-                height: 100vh;
-            }
-            .object {
-                width: 20%;
-                overflow-y: auto; 
-                background-color: #fff;
-                border-left: 1px solid #ddd;
-                padding-left: 10px;
-            }
-            .object-list {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-            }
-            .hide{
-                display: none;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="main-content">
-            <div class="container">
-                <div class="get-image">
-                    <img id="image" src="/get-image" alt="image1">
-                </div>
-                <div class="controls">
-                    <button id="zoom-in">Zoom In</button>
-                    <button id="zoom-out">Zoom Out</button>
-                    <button id="draw">Draw</button>
-                    <button id="end-drawing"  class="hide">End Drawing</button>
-                </div>
-            </div>
-            <div class="object">
-                <div class="object-header">Objects</div>
-                <ul class="object-list"></ul>
-            </div>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <style>
+        canvas {
+            /* Xóa khung viền của canvas */
+            border: none;
+            display: block;
+            margin: 0 5px;
+        }
+        #end-draw{
+            display: none;
+        }
+        #content{
+            display: flex;
+            flex-direction: row;
+        }
+        #right-bar{
+            margin-left: 5px;
+            border: 1px solid #000;
+            width: 20vw;
+        }
+        #object-header{
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome, {{ user_id }}</h1>
 
-        <script>
-            const imageElement = document.getElementById('image');
-            const zoomInButton = document.getElementById('zoom-in');
-            const zoomOutButton = document.getElementById('zoom-out');
-            const drawButton = document.getElementById('draw');
-            const endDrawingButton = document.getElementById('end-drawing');
-            const objectList = document.querySelector('.object-list');
-            
-            let drawing = false;
-            let points = [];
-            let firstPoint = null;
+    <div>
+        <button id="zoom-in">Zoom In</button>
+        <button id="zoom-out">Zoom Out</button>
+        <button id="draw">Draw</button>
+        <button id="end-draw">End Draw</button>
+        <button id="delete-last">Delete Last</button>
+    </div>
 
-            function reloadImage() {
-                const timestamp = new Date().getTime();
-                imageElement.src = '/get-image?timestamp=' + timestamp;
+    <div id="content">
+        <canvas id="imageCanvas"></canvas>
+    
+        <div id="right-bar">
+            <h2 id="object-header">Objects</h2>
+            <ul id="object-list"></ul>
+        </div> 
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('imageCanvas');
+        const objectList = document.getElementById('object-list');
+        const ctx = canvas.getContext('2d');
+        let drawingMode = false;
+        let points = [];
+        const threshold = 10;  // Adjust threshold value as needed
+        
+        updateObjectList()
+        function loadImage() {
+            fetch('/get-image')
+                .then(response => response.blob())
+                .then(blob => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Set canvas size to the image size
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+
+                        // Clear the canvas
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        // Draw the image with its original size
+                        ctx.drawImage(img, 0, 0, img.width, img.height);
+                        
+                        // Draw points and lines on the image
+                        drawPointsAndLines();
+                    };
+                    img.src = URL.createObjectURL(blob);
+                });
+        }
+
+        function drawPointsAndLines() {
+            points.forEach((point, index) => {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+
+                if (index > 0) {
+                    ctx.strokeStyle = 'green';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(points[index - 1].x, points[index - 1].y);
+                    ctx.lineTo(point.x, point.y);
+                    ctx.stroke();
+                }
+            });
+
+            if (points.length > 1 && isNearFirstPoint(points[points.length - 1], points[0])) {
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+                ctx.lineTo(points[0].x, points[0].y);
+                ctx.stroke();
+                drawingMode = false;  // Stop drawing if closed
+                sendToggleDraw(false);
             }
+        }
 
-            // Zoom In
-            zoomInButton.addEventListener('click', () => {
-                fetch('/zoom', {
+        function isNearFirstPoint(lastPoint, firstPoint) {
+            const distance = Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2));
+            return distance < threshold;
+        }
+
+        canvas.addEventListener('click', (event) => {
+            if (drawingMode) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                points.push({ x: x, y: y });
+
+                // Vẽ điểm và đường thẳng ngay lập tức sau khi nhấp
+                drawPointsAndLines();
+
+                // Gửi điểm lên server
+                fetch('/draw', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ zoom_in: true })
-                }).then(reloadImage);
-            });
+                    body: JSON.stringify({ points: [{ x: x, y: y }] })
+                });
+            }
+        });
 
-            // Zoom Out
-            zoomOutButton.addEventListener('click', () => {
-                fetch('/zoom', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ zoom_in: false })
-                }).then(reloadImage);
-            });
+        function updateObjectList() {
+            fetch('/get-objects')
+                .then(response => response.json())
+                .then(polygons => {
+                    const objectList = document.getElementById('object-list');
+                    objectList.innerHTML = ''; // Clear the current list
 
-            // Start Drawing
-            drawButton.addEventListener('click', () => {
-                drawing = true;
-                points = [];
-                firstPoint = null;
-                imageElement.style.cursor = 'crosshair';
-            });
+                    polygons.forEach((polygon, index) => {
+                        const polygonItem = document.createElement('li');
 
-            // End Drawing
-            endDrawingButton.addEventListener('click', () => {
-                if (points.length > 2) {
-                    fetch('/draw', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ points })
-                    }).then(() => {
-                        const li = document.createElement('li');
-                        li.textContent = `Object: ${points.map(p => `(${p.x.toFixed(0)}, ${p.y.toFixed(0)})`).join(', ')}`;
-                        objectList.appendChild(li);
-                        resetDrawing();
-                        reloadImage();
+                        // Create a checkbox for each polygon
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `polygon-${index}`;
+                        checkbox.value = index;
+
+                        const label = document.createElement('label');
+                        label.htmlFor = `polygon-${index}`;
+                        label.innerText = `Polygon ${index + 1}`;
+
+                        polygonItem.appendChild(checkbox);
+                        polygonItem.appendChild(label);
+                        objectList.appendChild(polygonItem);
                     });
-                } else {
-                    alert('Please draw more points to define an object.');
-                }
-            });
+                });     
+        }
 
-            // Handle Image Click
-            imageElement.addEventListener('click', (e) => {
-                if (drawing) {
-                    const rect = imageElement.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            fetch('/zoom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ zoom_in: true })
+            }).then(loadImage);
+        });
 
-                    points.push({ x, y });
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            fetch('/zoom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ zoom_in: false })
+            }).then(loadImage);
+        });
 
-                    if (firstPoint === null) {
-                        firstPoint = { x, y };
-                    } else if (Math.hypot(x - firstPoint.x, y - firstPoint.y) < 10) {
-                        endDrawingButton.click();
-                    }
-                }
-            });
+        document.getElementById('draw').addEventListener('click', () => {
+            drawingMode = true;
+            sendToggleDraw(true);
+        });
 
-            function resetDrawing() {
-                drawing = false;
-                points = [];
-                firstPoint = null;
-                imageElement.style.cursor = 'default';
+        document.getElementById('delete-last').addEventListener('click', () => {
+            if (points.length > 0) {
+                points.pop();
+                fetch('/delete-last', { method: 'POST' })
+                    .then(() => {
+                        // Clear the canvas and reload the image
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        fetch('/get-image')
+                            .then(response => response.blob())
+                            .then(blob => {
+                                const img = new Image();
+                                img.onload = () => {
+                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    drawPointsAndLines();  // Redraw the remaining points
+                                };
+                                img.src = URL.createObjectURL(blob);
+                            });
+                    });
             }
-        </script>
-    </body>
-    </html>
+        });
+
+        document.getElementById('end-draw').addEventListener('click', () => {
+            drawingMode = false;
+            sendToggleDraw(false);
+        });
+
+        function sendToggleDraw(drawingMode) {
+            updateObjectList()
+            fetch('/toggle-draw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drawing_mode: drawingMode })
+            }).then(() => {
+                if (!drawingMode) points = [];  // Clear points when drawing ends
+            });
+        }
+        
+        loadImage();
+    </script>
+</body>
+</html>
