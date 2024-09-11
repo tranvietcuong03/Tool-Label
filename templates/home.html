@@ -52,6 +52,7 @@
         <button id="draw">Draw</button>
         <button id="end-draw">End Draw</button>
         <button id="delete-last">Delete Last</button>
+        <button id="delete-polygon">Delete Polygon</button>
     </div>
 
     <div id="content">
@@ -64,7 +65,7 @@
             </div>
             <h2 id="object-header">Objects</h2>
             <ul id="object-list"></ul>
-        </div> 
+        </div>
     </div>
 
 
@@ -75,8 +76,10 @@
         let drawingMode = false;
         let points = [];
         const threshold = 10;  // Adjust threshold value as needed
-        
-        updateObjectList();
+        let deleteMode = false;
+        let polygons = []; 
+
+        loadClasses();
         function loadImage() {
             fetch('/get-image')
                 .then(response => response.blob())
@@ -97,6 +100,56 @@
                         drawPointsAndLines();
                     };
                     img.src = URL.createObjectURL(blob);
+                });
+        }
+
+        let selectedLabel = null;  // Store the currently selected label        
+        // Load classes and handle checkbox selection
+        function loadClasses() {
+            fetch('/static/config.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(config => {
+                    console.log(config);
+                    const classes = config.classes;
+                    objectList.innerHTML = '';              
+
+                    classes.forEach((className, index) => {
+                        const listItem = document.createElement('li');      
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `class-${index}`;
+                        checkbox.value = className;             
+
+                        const label = document.createElement('label');
+                        label.htmlFor = `class-${index}`;
+                        label.innerText = className;                
+
+                        checkbox.addEventListener('change', (event) => {
+                            if (event.target.checked) {
+                                document.querySelectorAll('#object-list input[type="checkbox"]').forEach(box => {
+                                    if (box !== event.target) {
+                                        box.checked = false;
+                                    }
+                                });
+                                selectedLabel = className;  // Set the selected label when checked
+                            } else {
+                                selectedLabel = null;  // No label selected if unchecked
+                            }
+                        });             
+
+                        listItem.appendChild(checkbox);
+                        listItem.appendChild(label);
+                        objectList.appendChild(listItem);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading classes:', error);
                 });
         }
 
@@ -146,39 +199,15 @@
                 fetch('/draw', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ points: [{ x: x, y: y }] })
+                    body: JSON.stringify({ points: [{ x: x, y: y }], label: selectedLabel})
                 });
             }
         });
 
-        function updateObjectList() {
-            fetch('/get-objects')
-                .then(response => response.json())
-                .then(polygons => {
-                    const objectList = document.getElementById('object-list');
-                    objectList.innerHTML = ''; // Clear the current list
-
-                    polygons.forEach((polygon, index) => {
-                        const polygonItem = document.createElement('li');
-
-                        // Create a checkbox for each polygon
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.id = `polygon-${index}`;
-                        checkbox.value = index;
-
-                        const label = document.createElement('label');
-                        label.htmlFor = `polygon-${index}`;
-                        label.innerText = `Polygon ${index + 1}`;
-
-                        polygonItem.appendChild(checkbox);
-                        polygonItem.appendChild(label);
-                        objectList.appendChild(polygonItem);
-                    });
-                });     
-        }
+        
 
         document.getElementById('submit').addEventListener('click', () => {
+            loadImage();
             fetch('/submit-polygons', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -242,17 +271,78 @@
         });
 
         function sendToggleDraw(drawingMode) {
-            updateObjectList()
+            if (!selectedLabel && drawingMode) {
+                alert('Please select a label before drawing!');
+                return;
+            }       
             fetch('/toggle-draw', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ drawing_mode: drawingMode })
+                body: JSON.stringify({ drawing_mode: drawingMode, label: selectedLabel })  // Include the selected label
             }).then(() => {
                 if (!drawingMode) points = [];  // Clear points when drawing ends
             });
         }
-        
         loadImage();
+
+        //  Delete mode  
+        let selectedPolygonIndex = null;
+
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'e') {
+                deleteMode = !deleteMode;
+                alert(deleteMode ? 'Delete Mode Enabled' : 'Delete Mode Disabled');
+            }
+        });
+
+        canvas.addEventListener('click', function(event) {
+            if(!deleteMode) return;
+
+            const rect = event.target.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            fetch('/check-point', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    x: clickX,
+                    y: clickY
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.inside) {
+                    console.log("Point inside polygon at index:", data.polygon_index);
+                    selectedPolygonIndex = data.polygon_index;
+
+                } else {
+                    console.log("Point outside of all polygons");
+                }
+            });
+        });
+
+        document.getElementById('delete-polygon').addEventListener('click', () => {
+            fetch('/delete-polygon', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ polygon_index: selectedPolygonIndex }) // Replace with actual selected index
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Polygon deleted successfully');
+                    selectedPolygonIndex = null;
+                    deleteMode = false
+                    loadImage();
+                } else {
+                    alert('Delete Mode is turn off');
+                }
+            });
+        });
     </script>
 </body>
 </html>

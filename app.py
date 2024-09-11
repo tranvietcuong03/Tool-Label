@@ -86,12 +86,13 @@ def save_polygons():
 def toggle_draw():
     global drawing_mode, all_object_polygon, object_points
     drawing_mode = request.json.get('drawing_mode', False)
+    label = request.json.get('label', 'Unknown')
     if not drawing_mode:
         all_object_polygon.append({
-            'label': "MyLable",
+            'label': label,  
             'points': object_points
         })
-        object_points = []  # Clear points when ending drawing
+        object_points = []  
     return ('', 204)
 
 @app.route('/submit-polygons', methods=['POST'])
@@ -153,20 +154,8 @@ def plot_coordinates_on_image():
                     prev_point = object_points[i - 1]
                     prev_x_resized = int(prev_point['x'] * scale)
                     prev_y_resized = int(prev_point['y'] * scale)
-                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)  # Green line
-                
-    
-            # If the last point is near the first point, connect them
-            # last_point = object_points[-1]
-            # if is_near_first_point(last_point, first_point):
-            #     print(first_point,'--------------------------------')
-            #     object_points.append(first_point)
-            #     first_x_resized = int(first_point['x'] * scale)
-            #     first_y_resized = int(first_point['y'] * scale)
-            #     last_x_resized = int(last_point['x'] * scale)
-            #     last_y_resized = int(last_point['y'] * scale)
-            #     cv2.line(img_resized, (last_x_resized, last_y_resized), (first_x_resized, first_y_resized), (255, 0, 0), 2)  # Blue closing line
-   
+                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)  
+
     _, buffer = cv2.imencode('.png', img_resized)
     buf = io.BytesIO(buffer)
     return buf
@@ -183,14 +172,56 @@ def get_objects():
     global all_object_polygon
     return jsonify(all_object_polygon)
 
-@app.route('/delete-object/<int:index>', methods=['DELETE'])
-def delete_object(index):
-    global all_object_polygon
-    if 0 <= index < len(all_object_polygon):
-        del all_object_polygon[index]
-        save_polygons()
-        return '', 204  # No Content
-    return '', 404  # Not Found
+@app.route('/check-point', methods=['POST'])
+def check_point():
+    global all_object_polygon, scale
+    
+    # Get the click coordinates from the frontend
+    data = request.json
+    click_x = data['x']
+    click_y = data['y']
+    
+    # Adjust the click coordinates based on the scale
+    original_x = click_x / scale
+    original_y = click_y / scale
+    point = {'x': original_x, 'y': original_y}
+    
+    # Loop through all polygons to check if the point is inside any
+    for i, polygon_object in enumerate(all_object_polygon):
+        polygon = polygon_object['points']
+        if is_point_inside_polygon(point, polygon):
+            return jsonify({'inside': True, 'polygon_index': i})  
+    
+    return jsonify({'inside': False})
+
+
+def is_point_inside_polygon(point, polygon):
+    x = point['x']
+    y = point['y']
+    inside = False
+    num_points = len(polygon)
+
+    for i in range(num_points):
+        j = (i - 1) % num_points
+        xi, yi = polygon[i]['x'], polygon[i]['y']
+        xj, yj = polygon[j]['x'], polygon[j]['y']
+
+        intersect = ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+        if intersect:
+            inside = not inside
+
+    return inside
+
+@app.route('/delete-polygon', methods=['POST'])
+def delete_polygon():
+    data = request.json
+    polygon_index = data.get('polygon_index')
+
+    if polygon_index is not None and 0 <= polygon_index < len(all_object_polygon):
+        del all_object_polygon[polygon_index]
+        return jsonify({'success': True})
+
+    return jsonify({'success': False})
 
 if __name__ == '__main__':
     app.run(debug=True)
