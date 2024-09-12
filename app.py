@@ -217,29 +217,6 @@ def get_objects():
     global all_object_polygon
     return jsonify(all_object_polygon)
 
-# def hightlight_polygon(polygon):
-#     global scale
-
-#     image_path = get_image_path()
-#     img = cv2.imread(image_path)
-#     if img is None:
-#         raise FileNotFoundError("Image file not found.")
-#     img_resized = cv2.resize(img, (0, 0), fx=scale, fy=scale)
-#     for i, point in enumerate(polygon):
-#         x_resized = int(point['x'] * scale)
-#         y_resized = int(point['y'] * scale)
-
-#         cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0, 0), -1)
-
-#         if i > 0 and i < len(object_points):
-#             prev_point = object_points[i - 1]
-#             prev_x_resized = int(prev_point['x'] * scale)
-#             prev_y_resized = int(prev_point['y'] * scale)
-#             cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (255, 255, 0), 3)
-#     _, buffer = cv2.imencode('.png', img_resized)
-#     buf = io.BytesIO(buffer)
-#     return buf
-
 @app.route('/check-point', methods=['POST'])
 def check_point():
     global all_object_polygon, scale

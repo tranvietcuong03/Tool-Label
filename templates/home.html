@@ -243,8 +243,13 @@
         });
 
         document.getElementById('draw').addEventListener('click', () => {
-            drawingMode = true;
-            sendToggleDraw(true);
+            if (selectedLabel){
+                drawingMode = true;
+                sendToggleDraw(true);
+            }
+            else {
+                alert('Please select a label before drawing!');
+            }
         });
 
         document.getElementById('delete-last').addEventListener('click', () => {
@@ -275,6 +280,7 @@
         });
 
         function sendToggleDraw(drawingMode) {
+            console.log(drawingMode);
             if (!selectedLabel && drawingMode) {
                 alert('Please select a label before drawing!');
                 return;
