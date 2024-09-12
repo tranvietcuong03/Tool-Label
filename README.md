@@ -11,5 +11,5 @@ File config path: ./static/config.json
 To complete an polygon you need to connect the last point to the first point 
 
 ## Home Interface:
-After login with id = admin2 <br>
+After login with id is admin2 <br>
 ![...](https://github.com/tranvietcuong03/Tool-Label/blob/master/Visualization/Home.png)
