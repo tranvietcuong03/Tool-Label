@@ -205,10 +205,10 @@
         });
 
         
-
+        const user_id = "{{ user_id }}";
         document.getElementById('submit').addEventListener('click', () => {
             loadImage();
-            fetch('/submit-polygons', {
+            fetch(`/${user_id}/submit-polygons`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             })
@@ -343,6 +343,19 @@
                 }
             });
         });
+        document.getElementById('req').addEventListener('click', function() {
+    fetch('/next-image', {
+        method: 'POST'
+    }).then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            loadImage();  // Reload the image on the canvas
+        } else {
+            alert(data.message);
+        }
+    });
+});
+
     </script>
 </body>
 </html>

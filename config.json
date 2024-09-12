@@ -1,0 +1,11 @@
+{
+    "classes": ["motorbike", "person"],
+    "paths": {
+         "unlabelled_image_folder": "static\\unlable_image\\",
+         "labelled_image_folder": "static\\labelled_image",
+         "csv_file_path": "user_id.csv"
+         
+       }
+   
+    
+}
