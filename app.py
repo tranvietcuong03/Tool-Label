@@ -60,7 +60,9 @@ imageHeight = 0
 def get_image():
     image_path = get_image_path()
     if image_path:
-        return send_file(plot_coordinates_on_image(), mimetype='image/png')
+        selected_polygon_index = request.args.get('selected_polygon_index', None, type=int)
+        image_stream = plot_coordinates_on_image(selected_polygon_index)
+        return send_file(image_stream, mimetype='image/png')
     return "No more images.", 404
 
 @app.route('/zoom', methods=['POST'])
@@ -168,7 +170,7 @@ def is_near_first_point(last_point, first_point, threshold=10):
     distance = math.sqrt((last_point['x'] - first_point['x']) ** 2 + (last_point['y'] - first_point['y']) ** 2)
     return distance < threshold
 
-def plot_coordinates_on_image():
+def plot_coordinates_on_image(selected_polygon_index=None):
     global all_object_polygon, scale, imageWidth, imageHeight
     image_path = get_image_path()
     img = cv2.imread(image_path)
@@ -178,12 +180,16 @@ def plot_coordinates_on_image():
     imageHeight, imageWidth, _ = img.shape
 
     img_resized = cv2.resize(img, (0, 0), fx=scale, fy=scale)
-    for object in all_object_polygon:
+    for idx, object in enumerate(all_object_polygon):
         object_points = object['points']
         if object_points:
+            color = (0, 255, 0)
+            if idx == selected_polygon_index:
+                color = (255, 0, 255)
             first_point = object_points[0]
             object_points.append(first_point)
             for i, point in enumerate(object_points):
+
                 x_resized = int(point['x'] * scale)
                 y_resized = int(point['y'] * scale)
 
@@ -193,7 +199,7 @@ def plot_coordinates_on_image():
                     prev_point = object_points[i - 1]
                     prev_x_resized = int(prev_point['x'] * scale)
                     prev_y_resized = int(prev_point['y'] * scale)
-                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)
+                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), color , 2)
 
     _, buffer = cv2.imencode('.png', img_resized)
     buf = io.BytesIO(buffer)
@@ -210,6 +216,29 @@ def delete_last_point():
 def get_objects():
     global all_object_polygon
     return jsonify(all_object_polygon)
+
+# def hightlight_polygon(polygon):
+#     global scale
+
+#     image_path = get_image_path()
+#     img = cv2.imread(image_path)
+#     if img is None:
+#         raise FileNotFoundError("Image file not found.")
+#     img_resized = cv2.resize(img, (0, 0), fx=scale, fy=scale)
+#     for i, point in enumerate(polygon):
+#         x_resized = int(point['x'] * scale)
+#         y_resized = int(point['y'] * scale)
+
+#         cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0, 0), -1)
+
+#         if i > 0 and i < len(object_points):
+#             prev_point = object_points[i - 1]
+#             prev_x_resized = int(prev_point['x'] * scale)
+#             prev_y_resized = int(prev_point['y'] * scale)
+#             cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (255, 255, 0), 3)
+#     _, buffer = cv2.imencode('.png', img_resized)
+#     buf = io.BytesIO(buffer)
+#     return buf
 
 @app.route('/check-point', methods=['POST'])
 def check_point():
@@ -260,8 +289,9 @@ def delete_polygon():
 
 @app.route('/next-image', methods=['POST'])
 def next_image():
-    global current_image_index
+    global current_image_index, all_object_polygon
     if current_image_index < len(image_files) - 1:
+        all_object_polygon = []
         current_image_index += 1
         return jsonify({'success': True, 'next_image': image_files[current_image_index]})
     else:
