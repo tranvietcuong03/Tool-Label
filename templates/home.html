@@ -77,11 +77,15 @@
         let points = [];
         const threshold = 10;  // Adjust threshold value as needed
         let deleteMode = false;
-        let polygons = []; 
+        let polygons = [];
+        let selectedPolygonIndex = null;
 
         loadClasses();
         function loadImage() {
-            fetch('/get-image')
+            const url = selectedPolygonIndex !== null 
+                        ? `/get-image?selected_polygon_index=${selectedPolygonIndex}`
+                        : '/get-image';
+            fetch(url)
                 .then(response => response.blob())
                 .then(blob => {
                     const img = new Image();
@@ -286,8 +290,7 @@
         loadImage();
 
         //  Delete mode  
-        let selectedPolygonIndex = null;
-
+    
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'e') {
                 deleteMode = !deleteMode;
@@ -316,7 +319,7 @@
                 if (data.inside) {
                     console.log("Point inside polygon at index:", data.polygon_index);
                     selectedPolygonIndex = data.polygon_index;
-
+                    loadImage(selectedPolygonIndex)
                 } else {
                     console.log("Point outside of all polygons");
                 }
@@ -343,18 +346,20 @@
                 }
             });
         });
+
+        // Request Button
         document.getElementById('req').addEventListener('click', function() {
-    fetch('/next-image', {
-        method: 'POST'
-    }).then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            loadImage();  // Reload the image on the canvas
-        } else {
-            alert(data.message);
-        }
-    });
-});
+            fetch('/next-image', {
+                method: 'POST'
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadImage();  // Reload the image on the canvas
+                } else {
+                    alert(data.message);
+                }
+            });
+        });
 
     </script>
 </body>
