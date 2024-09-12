@@ -9,3 +9,7 @@
 File config path: ./static/config.json
 
 To complete an polygon you need to connect the last point to the first point 
+
+## Home Interface:
+
+![...](https://github.com/tranvietcuong03/Tool-Label/blob/master/Visualization/Home.png)
