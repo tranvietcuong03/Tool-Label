@@ -2,7 +2,7 @@
 
 ## Run the app:
 1. Run app.py
-2. Go to the link that show in the commander
+2. Go to the link that show in the command
 3. Login with id
    
 ## To change path to unlabel_image, labelled_iamge and scv_file
