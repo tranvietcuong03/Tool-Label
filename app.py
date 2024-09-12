@@ -6,6 +6,7 @@ import os
 import json
 import base64
 import math
+import random
 
 app = Flask(__name__)
 
@@ -217,29 +218,6 @@ def get_objects():
     global all_object_polygon
     return jsonify(all_object_polygon)
 
-# def hightlight_polygon(polygon):
-#     global scale
-
-#     image_path = get_image_path()
-#     img = cv2.imread(image_path)
-#     if img is None:
-#         raise FileNotFoundError("Image file not found.")
-#     img_resized = cv2.resize(img, (0, 0), fx=scale, fy=scale)
-#     for i, point in enumerate(polygon):
-#         x_resized = int(point['x'] * scale)
-#         y_resized = int(point['y'] * scale)
-
-#         cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0, 0), -1)
-
-#         if i > 0 and i < len(object_points):
-#             prev_point = object_points[i - 1]
-#             prev_x_resized = int(prev_point['x'] * scale)
-#             prev_y_resized = int(prev_point['y'] * scale)
-#             cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (255, 255, 0), 3)
-#     _, buffer = cv2.imencode('.png', img_resized)
-#     buf = io.BytesIO(buffer)
-#     return buf
-
 @app.route('/check-point', methods=['POST'])
 def check_point():
     global all_object_polygon, scale
@@ -296,6 +274,49 @@ def next_image():
         return jsonify({'success': True, 'next_image': image_files[current_image_index]})
     else:
         return jsonify({'success': False, 'message': 'No more images.'}), 400
+
+@app.route('/highlight-class')
+def highlight_class():
+    global scale
+    try:
+        class_names = request.args.getlist('class_name')
+        print(class_names)
+        dict_color = {}
+        for class_name in class_names:
+            dict_color[class_name] = (random.randint(0, 200), random.randint(0, 200), random.randint(0, 200))
+        
+        image_path = get_image_path()
+        image = cv2.imread(image_path)
+        if image is None:
+            raise FileNotFoundError("Image file not found")
+
+        img_resized = cv2.resize(image, (0, 0), fx=scale, fy=scale)
+
+        for polygon in all_object_polygon:
+            if polygon['label'] in class_names:
+                points = polygon['points']
+                points.append(points[0])
+                for i, point in enumerate(points):
+                    
+                    x_resized = int(point['x'] * scale)
+                    y_resized = int(point['y'] * scale)
+
+                    cv2.circle(img_resized, (x_resized, y_resized), 8, dict_color[polygon['label']], -1)
+
+                    if i > 0:
+                        prev_point = points[i - 1]
+                        prev_x_resized = int(prev_point['x'] * scale)
+                        prev_y_resized = int(prev_point['y'] * scale)
+                        cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), dict_color[polygon['label']], 2)
+                    
+
+        _, buffer = cv2.imencode('.png', img_resized)
+        buf = io.BytesIO(buffer)
+        return send_file(buf, mimetype='image/png')
+
+    except Exception as e:
+        print(f"Error: {e}")  
+        return str(e), 500  
 
 if __name__ == '__main__':
     app.run(debug=True)
