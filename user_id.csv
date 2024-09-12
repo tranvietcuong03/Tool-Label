@@ -2,3 +2,4 @@ user_id,Unnamed: 1,image_name,labelled_image_path
 admin1, ,,
 admin2,,,
 ,,image1,admin2\image1.json
+,,image2,admin2\image2.json

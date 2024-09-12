@@ -79,6 +79,7 @@
         let deleteMode = false;
         let polygons = [];
         let selectedPolygonIndex = null;
+        let highlightClasses = [];
 
         loadClasses();
         function loadImage() {
@@ -132,7 +133,16 @@
 
                         const label = document.createElement('label');
                         label.htmlFor = `class-${index}`;
-                        label.innerText = className;                
+                        label.innerText = className;   
+                        
+                        const highlightCheckbox = document.createElement('input');
+                        highlightCheckbox.type = 'checkbox';
+                        highlightCheckbox.id = `class-highlight-${index}`;
+                        highlightCheckbox.value = className;
+
+                        const highlightLabel = document.createElement('label');
+                        highlightLabel.htmlFor = `class-highlight-${index}`;
+                        highlightLabel.innerText = '';
 
                         checkbox.addEventListener('change', (event) => {
                             if (event.target.checked) {
@@ -145,9 +155,24 @@
                             } else {
                                 selectedLabel = null;  // No label selected if unchecked
                             }
-                        });             
+                        });
+                        
+                        highlightCheckbox.addEventListener('change', (event) => {
+                            if (event.target.checked) {
+                                highlightClasses.push(className); 
+                                console.log(highlightClasses);
+                            } else {
+                                const index = highlightClasses.indexOf(className);
+                                if (index > -1) {
+                                    highlightClasses.splice(index, 1);
+                                    console.log(highlightClasses);
+                                }
+                            }
+                            highlightClassPolygons();
+                        });
 
                         listItem.appendChild(checkbox);
+                        listItem.appendChild(highlightCheckbox);
                         listItem.appendChild(label);
                         objectList.appendChild(listItem);
                     });
@@ -156,6 +181,30 @@
                     console.error('Error loading classes:', error);
                 });
         }
+
+        function highlightClassPolygons() {
+            if (highlightClasses.length === 0) {
+                loadImage();
+                return;
+            }
+            const params = new URLSearchParams();
+            highlightClasses.forEach(className => {
+                params.append('class_name', className); // Adds each class name separately
+            });
+            fetch(`/highlight-class?${params.toString()}`)
+                .then(response => response.blob())
+                .then(blob => {
+                    const img = new Image();
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, img.width, img.height);
+                    };
+                    img.src = URL.createObjectURL(blob);
+                });
+        }
+
 
         function drawPointsAndLines() {
             points.forEach((point, index) => {
