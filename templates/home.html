@@ -11,9 +11,6 @@
             display: block;
             margin: 0 5px;
         }
-        #end-draw{
-            display: none;
-        }
         #content{
             display: flex;
             flex-direction: row;
@@ -41,18 +38,33 @@
         .btn-child:hover{
             cursor: pointer;
         }
+        .hiden{
+            display: none;
+        }
+        ul{
+            list-style-type: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+        #object-list li input[type="checkbox"] {
+            margin-right: 20px; 
+            transform: scale(1.5);   
+        }
+        #right-bar p{
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
     <h1>Welcome, {{ user_id }}</h1>
 
     <div>
-        <button id="zoom-in">Zoom In</button>
-        <button id="zoom-out">Zoom Out</button>
-        <button id="draw">Draw</button>
-        <button id="end-draw">End Draw</button>
-        <button id="delete-last">Delete Last</button>
-        <button id="delete-polygon">Delete Polygon</button>
+        <button id="zoom-in" class="hiden">Zoom In</button>
+        <button id="zoom-out" class="hiden">Zoom Out</button>
+        <button id="draw" class="hiden">Draw</button>
+        <button id="end-draw" class="hiden">End Draw</button>
+        <button id="delete-last" class="hiden">Delete Last</button>
+        <button id="delete-polygon" class="hiden">Delete Polygon</button>
     </div>
 
     <div id="content">
@@ -64,6 +76,7 @@
                 <div class="btn-child" id="submit">Submit</div>
             </div>
             <h2 id="object-header">Objects</h2>
+            <p id="object-boxname">Class - Hightlight</p>
             <ul id="object-list"></ul>
         </div>
     </div>
@@ -275,51 +288,59 @@
         });
 
 
-        document.getElementById('zoom-in').addEventListener('click', () => {
-            fetch('/zoom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ zoom_in: true })
-            }).then(loadImage);
-        });
-
-        document.getElementById('zoom-out').addEventListener('click', () => {
-            fetch('/zoom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ zoom_in: false })
-            }).then(loadImage);
-        });
-
-        document.getElementById('draw').addEventListener('click', () => {
-            if (selectedLabel){
-                drawingMode = true;
-                sendToggleDraw(true);
-            }
-            else {
-                alert('Please select a label before drawing!');
+        document.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key === '+'){
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: true })
+                }).then(loadImage);
             }
         });
 
-        document.getElementById('delete-last').addEventListener('click', () => {
-            if (points.length > 0) {
-                points.pop();
-                fetch('/delete-last', { method: 'POST' })
-                    .then(() => {
-                        // Clear the canvas and reload the image
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key === '-'){
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: false })
+                }).then(loadImage);
+            }
+        });
 
-                        fetch('/get-image')
-                            .then(response => response.blob())
-                            .then(blob => {
-                                const img = new Image();
-                                img.onload = () => {
-                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                    drawPointsAndLines();  // Redraw the remaining points
-                                };
-                                img.src = URL.createObjectURL(blob);
-                            });
-                    });
+        document.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key === 'q'){
+                if (selectedLabel){
+                    drawingMode = true;
+                    sendToggleDraw(true);
+                }
+                else {
+                    alert('Please select a label before drawing!');
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key == 'Backspace'){
+                if (points.length > 0) {
+                    points.pop();
+                    fetch('/delete-last', { method: 'POST' })
+                        .then(() => {
+                            // Clear the canvas and reload the image
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+                            fetch('/get-image')
+                                .then(response => response.blob())
+                                .then(blob => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                        drawPointsAndLines();  // Redraw the remaining points
+                                    };
+                                    img.src = URL.createObjectURL(blob);
+                                });
+                        });
+                }
             }
         });
 
@@ -329,7 +350,6 @@
         });
 
         function sendToggleDraw(drawingMode) {
-            console.log(drawingMode);
             if (!selectedLabel && drawingMode) {
                 alert('Please select a label before drawing!');
                 return;
@@ -349,7 +369,6 @@
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'e') {
                 deleteMode = !deleteMode;
-                alert(deleteMode ? 'Delete Mode Enabled' : 'Delete Mode Disabled');
             }
         });
 
@@ -372,34 +391,30 @@
             .then(response => response.json())
             .then(data => {
                 if (data.inside) {
-                    console.log("Point inside polygon at index:", data.polygon_index);
                     selectedPolygonIndex = data.polygon_index;
                     loadImage(selectedPolygonIndex)
-                } else {
-                    console.log("Point outside of all polygons");
                 }
             });
         });
 
-        document.getElementById('delete-polygon').addEventListener('click', () => {
-            fetch('/delete-polygon', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ polygon_index: selectedPolygonIndex }) // Replace with actual selected index
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Polygon deleted successfully');
-                    selectedPolygonIndex = null;
-                    deleteMode = false
-                    loadImage();
-                } else {
-                    alert('Delete Mode is turn off');
-                }
-            });
+        document.addEventListener('keydown', (event) => {
+            if (event.key == 'Delete') {
+                fetch('/delete-polygon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ polygon_index: selectedPolygonIndex }) // Replace with actual selected index
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        selectedPolygonIndex = null;
+                        deleteMode = false
+                        loadImage();
+                    }
+                });
+            }
         });
 
         // Request Button

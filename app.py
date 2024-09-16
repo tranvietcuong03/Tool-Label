@@ -280,7 +280,6 @@ def highlight_class():
     global scale
     try:
         class_names = request.args.getlist('class_name')
-        print(class_names)
         dict_color = {}
         for class_name in class_names:
             dict_color[class_name] = (random.randint(0, 200), random.randint(0, 200), random.randint(0, 200))
@@ -308,6 +307,21 @@ def highlight_class():
                         prev_x_resized = int(prev_point['x'] * scale)
                         prev_y_resized = int(prev_point['y'] * scale)
                         cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), dict_color[polygon['label']], 2)
+            else:
+                points = polygon['points']
+                points.append(points[0])
+                for i, point in enumerate(points):
+                    
+                    x_resized = int(point['x'] * scale)
+                    y_resized = int(point['y'] * scale)
+
+                    cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0 , 255), -1)
+
+                    if i > 0:
+                        prev_point = points[i - 1]
+                        prev_x_resized = int(prev_point['x'] * scale)
+                        prev_y_resized = int(prev_point['y'] * scale)
+                        cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)
                     
 
         _, buffer = cv2.imencode('.png', img_resized)
