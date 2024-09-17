@@ -103,9 +103,11 @@ def save_polygons(user_id):
 
     image_name = os.path.splitext(os.path.basename(image_path))[0]
 
+    # Đọc và mã hóa hình ảnh thành chuỗi base64
     with open(image_path, "rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode('utf-8')
 
+    # Lưu dữ liệu JSON
     json_save_dir = os.path.join(config['paths']['labelled_image_folder'], user_id)
     os.makedirs(json_save_dir, exist_ok=True)
     json_file_path = os.path.join(json_save_dir, f"{image_name}.json")
@@ -120,19 +122,26 @@ def save_polygons(user_id):
     with open(json_file_path, 'w') as file:
         json.dump(data, file)
 
+    # Cập nhật file CSV
     csv_file_path = config['paths']['csv_file_path']
     if not os.path.exists(csv_file_path):
-        df = pd.DataFrame(columns=['image_name', 'labelled_image_path'])
+        # Tạo DataFrame với các cột cần thiết nếu file CSV chưa tồn tại
+        df = pd.DataFrame(columns=['user_id', 'path_labelled_file'])
     else:
+        # Đọc file CSV nếu nó đã tồn tại
         df = pd.read_csv(csv_file_path)
 
     image_relative_path = os.path.join(user_id, f"{image_name}.json")
-    if 'image_name' not in df.columns:
-        df['image_name'] = ''
-    df.loc[df['image_name'] == image_name, 'labelled_image_path'] = image_relative_path
-    if df[df['image_name'] == image_name].empty:
-        df = pd.concat([df, pd.DataFrame([{'image_name': image_name, 'labelled_image_path': image_relative_path}])], ignore_index=True)
 
+    # Cập nhật hoặc thêm thông tin vào DataFrame
+    if user_id in df['user_id'].values:
+        # Nếu user_id đã tồn tại, cập nhật đường dẫn cho user_id đó
+        df.loc[df['user_id'] == user_id, 'path_labelled_file'] = image_relative_path
+    else:
+        # Thêm dòng mới nếu user_id không tồn tại
+        df = pd.concat([df, pd.DataFrame([{'user_id': user_id, 'path_labelled_file': image_relative_path}])], ignore_index=True)
+
+    # Lưu DataFrame vào file CSV
     df.to_csv(csv_file_path, index=False)
 
 @app.route('/toggle-draw', methods=['POST'])
