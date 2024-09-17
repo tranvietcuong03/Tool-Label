@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <style>
+        #canvas-container {
+            border: 1px solid #000;
+            overflow: auto; 
+            max-width: 90vw;    
+            position: relative;
+        }       
+        canvas {
+            display: block;
+            margin: 0;
+            border: none;
+            transform-origin: top left; 
+        }      
+        #right-bar {
+            margin-left: 0;
+            border: 1px solid #000;
+            min-width: 10vw;  
+            position: relative;
+            min-height: 40vh;
+        }
+        #content{
+            display: flex;
+            flex-direction: row;
+        }
+        #object-header{
+            text-align: center;
+        }
+        #btn{
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+        .btn-child{
+            padding: 5px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #000;
+        }
+        .btn-child:hover{
+            cursor: pointer;
+        }
+        .hiden{
+            display: none;
+        }
+        ul{
+            list-style-type: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+        #object-list li input[type="checkbox"] {
+            margin-right: 20px; 
+            transform: scale(1.5);   
+        }
+        #right-bar p{
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome, {{ user_id }}</h1>
+
+    <div>
+        <button id="zoom-in" class="hiden">Zoom In</button>
+        <button id="zoom-out" class="hiden">Zoom Out</button>
+        <button id="draw" class="hiden">Draw</button>
+        <button id="end-draw" class="hiden">End Draw</button>
+        <button id="delete-last" class="hiden">Delete Last</button>
+        <button id="delete-polygon" class="hiden">Delete Polygon</button>
+    </div>
+
+    <div id="content">
+        <div id="canvas-container">
+            <canvas id="imageCanvas"></canvas>
+        </div>
+    
+        <div id="right-bar">
+            <div id="btn">
+                <div class="btn-child" id="req">Request</div>
+                <div class="btn-child" id="submit">Submit</div>
+            </div>
+            <h2 id="object-header">Objects</h2>
+            <p id="object-boxname">Class - Hightlight</p>
+            <ul id="object-list"></ul>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('imageCanvas');
+        const objectList = document.getElementById('object-list');
+        const ctx = canvas.getContext('2d');
+        let drawingMode = false;
+        let points = [];
+        const threshold = 10;  // Adjust threshold value as needed
+        let deleteMode = false;
+        let polygons = [];
+        let selectedPolygonIndex = null;
+        let highlightClasses = [];
+
+        loadClasses();
+        function loadImage() {
+            const url = selectedPolygonIndex !== null 
+                        ? `/get-image?selected_polygon_index=${selectedPolygonIndex}`
+                        : '/get-image';
+            fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Set canvas size to the image size
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+
+                        // Clear the canvas
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        // Draw the image with its original size
+                        ctx.drawImage(img, 0, 0, img.width, img.height);
+                        
+                        // Draw points and lines on the image
+                        drawPointsAndLines();
+                    };
+                    img.src = URL.createObjectURL(blob);
+                });
+        }
+
+        let selectedLabel = null;  // Store the currently selected label        
+        // Load classes and handle checkbox selection
+        function loadClasses() {
+            fetch('/static/config.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(config => {
+                    console.log(config);
+                    const classes = config.classes;
+                    objectList.innerHTML = '';              
+
+                    classes.forEach((className, index) => {
+                        const listItem = document.createElement('li');      
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `class-${index}`;
+                        checkbox.value = className;             
+
+                        const label = document.createElement('label');
+                        label.htmlFor = `class-${index}`;
+                        label.innerText = className;   
+                        
+                        const highlightCheckbox = document.createElement('input');
+                        highlightCheckbox.type = 'checkbox';
+                        highlightCheckbox.id = `class-highlight-${index}`;
+                        highlightCheckbox.value = className;
+
+                        const highlightLabel = document.createElement('label');
+                        highlightLabel.htmlFor = `class-highlight-${index}`;
+                        highlightLabel.innerText = '';
+
+                        checkbox.addEventListener('change', (event) => {
+                            if (event.target.checked) {
+                                document.querySelectorAll('#object-list input[type="checkbox"]').forEach(box => {
+                                    if (box !== event.target) {
+                                        box.checked = false;
+                                    }
+                                });
+                                selectedLabel = className;  // Set the selected label when checked
+                            } else {
+                                selectedLabel = null;  // No label selected if unchecked
+                            }
+                        });
+                        
+                        highlightCheckbox.addEventListener('change', (event) => {
+                            if (event.target.checked) {
+                                highlightClasses.push(className); 
+                                console.log(highlightClasses);
+                            } else {
+                                const index = highlightClasses.indexOf(className);
+                                if (index > -1) {
+                                    highlightClasses.splice(index, 1);
+                                    console.log(highlightClasses);
+                                }
+                            }
+                            highlightClassPolygons();
+                        });
+
+                        listItem.appendChild(checkbox);
+                        listItem.appendChild(highlightCheckbox);
+                        listItem.appendChild(label);
+                        objectList.appendChild(listItem);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading classes:', error);
+                });
+        }
+
+        function highlightClassPolygons() {
+            if (highlightClasses.length === 0) {
+                loadImage();
+                return;
+            }
+            const params = new URLSearchParams();
+            highlightClasses.forEach(className => {
+                params.append('class_name', className); // Adds each class name separately
+            });
+            fetch(`/highlight-class?${params.toString()}`)
+                .then(response => response.blob())
+                .then(blob => {
+                    const img = new Image();
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, img.width, img.height);
+                    };
+                    img.src = URL.createObjectURL(blob);
+                });
+        }
+
+
+        function drawPointsAndLines() {
+            points.forEach((point, index) => {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+
+                if (index > 0) {
+                    ctx.strokeStyle = 'green';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(points[index - 1].x, points[index - 1].y);
+                    ctx.lineTo(point.x, point.y);
+                    ctx.stroke();
+                }
+            });
+
+            if (points.length > 1 && isNearFirstPoint(points[points.length - 1], points[0])) {
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+                ctx.lineTo(points[0].x, points[0].y);
+                ctx.stroke();
+                drawingMode = false;  // Stop drawing if closed
+                sendToggleDraw(false);
+            }
+        }
+
+        function isNearFirstPoint(lastPoint, firstPoint) {
+            const distance = Math.sqrt(Math.pow(lastPoint.x - firstPoint.x, 2) + Math.pow(lastPoint.y - firstPoint.y, 2));
+            return distance < threshold;
+        }
+
+        canvas.addEventListener('click', (event) => {
+            if (drawingMode) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                points.push({ x: x, y: y });
+
+                // Vẽ điểm và đường thẳng ngay lập tức sau khi nhấp
+                drawPointsAndLines();
+
+                // Gửi điểm lên server
+                fetch('/draw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ points: [{ x: x, y: y }], label: selectedLabel})
+                });
+            }
+        });
+
+        
+        const user_id = "{{ user_id }}";
+        document.getElementById('submit').addEventListener('click', () => {
+            loadImage();
+            fetch(`/${user_id}/submit-polygons`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert('Polygons saved successfully!');
+                } else {
+                    alert('Failed to save polygons.');
+                }
+            });
+        });
+
+
+        document.addEventListener('keydown', (event) => {
+            if ( event.key === '+'){
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: true })
+                }).then(loadImage);
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if ( event.key === '-'){
+                fetch('/zoom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_in: false })
+                }).then(loadImage);
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if ( event.key === 'd'){
+                if (selectedLabel){
+                    drawingMode = true;
+                    sendToggleDraw(true);
+                }
+                else {
+                    alert('Please select a label before drawing!');
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key == 'Backspace'){
+                if (points.length > 0) {
+                    points.pop();
+                    fetch('/delete-last', { method: 'POST' })
+                        .then(() => {
+                            // Clear the canvas and reload the image
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+                            fetch('/get-image')
+                                .then(response => response.blob())
+                                .then(blob => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                        drawPointsAndLines();  // Redraw the remaining points
+                                    };
+                                    img.src = URL.createObjectURL(blob);
+                                });
+                        });
+                }
+            }
+        });
+
+        document.getElementById('end-draw').addEventListener('click', () => {
+            drawingMode = false;
+            sendToggleDraw(false);
+        });
+
+        function sendToggleDraw(drawingMode) {
+            if (!selectedLabel && drawingMode) {
+                alert('Please select a label before drawing!');
+                return;
+            }       
+            fetch('/toggle-draw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drawing_mode: drawingMode, label: selectedLabel })  // Include the selected label
+            }).then(() => {
+                if (!drawingMode) points = [];  // Clear points when drawing ends
+            });
+        }
+        loadImage();
+
+        //  Delete mode  
+    
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'e') {
+                deleteMode = !deleteMode;
+            }
+        });
+
+        canvas.addEventListener('click', function(event) {
+            if(!deleteMode) return;
+
+            const rect = event.target.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            fetch('/check-point', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    x: clickX,
+                    y: clickY
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.inside) {
+                    selectedPolygonIndex = data.polygon_index;
+                    loadImage(selectedPolygonIndex)
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key == 'Delete') {
+                fetch('/delete-polygon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ polygon_index: selectedPolygonIndex }) // Replace with actual selected index
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        selectedPolygonIndex = null;
+                        deleteMode = false
+                        loadImage();
+                    }
+                });
+            }
+        });
+
+        // Request Button
+        document.getElementById('req').addEventListener('click', function() {
+            fetch('/next-image', {
+                method: 'POST'
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadImage();  // Reload the image on the canvas
+                } else {
+                    alert(data.message);
+                }
+            });
+        });
+
+    </script>
+</body>
+</html>
