@@ -45,7 +45,27 @@ all_object_polygon = []
 scale = 0.5
 object_points = []
 drawing_mode = False
-image_dir = config['paths']['unlabelled_image_folder']
+
+# Thay đổi image_dir để phù hợp với cấu trúc mới
+def update_image_dir(user_id):
+    base_dir = config['paths']['unlabelled_image_folder']
+    user_dir = os.path.join(base_dir, 'unlabel-image', user_id)
+    os.makedirs(user_dir, exist_ok=True)
+
+    # Lấy danh sách ảnh
+    image_files = [f for f in os.listdir(base_dir) if os.path.isfile(os.path.join(base_dir, f))]
+
+    # Phân phối ảnh cho người dùng
+    num_users = len(accounts)
+    for index, image_file in enumerate(image_files):
+        user_index = index % num_users
+        user = accounts[user_index]
+        user_folder = os.path.join(base_dir, 'unlabel-image', user)
+        os.makedirs(user_folder, exist_ok=True)
+        new_image_path = os.path.join(user_folder, f'image_{index+1}.jpg')
+        os.rename(os.path.join(base_dir, image_file), new_image_path)
+
+image_dir = update_image_dir(userID)  # Cập nhật thư mục ảnh cho người dùng
 image_files = [f for f in os.listdir(image_dir)]
 current_image_index = 0
 
@@ -103,10 +123,12 @@ def save_polygons(user_id):
 
     image_name = os.path.splitext(os.path.basename(image_path))[0]
 
+    # Đọc và mã hóa hình ảnh thành chuỗi base64
     with open(image_path, "rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode('utf-8')
 
-    json_save_dir = os.path.join(config['paths']['labelled_image_folder'], user_id)
+    # Lưu dữ liệu JSON
+    json_save_dir = os.path.join(config['paths']['labelled_image_folder'], 'unlabel-image', user_id)
     os.makedirs(json_save_dir, exist_ok=True)
     json_file_path = os.path.join(json_save_dir, f"{image_name}.json")
 
@@ -120,19 +142,26 @@ def save_polygons(user_id):
     with open(json_file_path, 'w') as file:
         json.dump(data, file)
 
+    # Cập nhật file CSV
     csv_file_path = config['paths']['csv_file_path']
     if not os.path.exists(csv_file_path):
-        df = pd.DataFrame(columns=['image_name', 'labelled_image_path'])
+        # Tạo DataFrame với các cột cần thiết nếu file CSV chưa tồn tại
+        df = pd.DataFrame(columns=['user_id', 'path_labelled_file'])
     else:
+        # Đọc file CSV nếu nó đã tồn tại
         df = pd.read_csv(csv_file_path)
 
-    image_relative_path = os.path.join(user_id, f"{image_name}.json")
-    if 'image_name' not in df.columns:
-        df['image_name'] = ''
-    df.loc[df['image_name'] == image_name, 'labelled_image_path'] = image_relative_path
-    if df[df['image_name'] == image_name].empty:
-        df = pd.concat([df, pd.DataFrame([{'image_name': image_name, 'labelled_image_path': image_relative_path}])], ignore_index=True)
+    image_relative_path = os.path.join('unlabel-image', user_id, f"{image_name}.json")
 
+    # Cập nhật hoặc thêm thông tin vào DataFrame
+    if user_id in df['user_id'].values:
+        # Nếu user_id đã tồn tại, cập nhật đường dẫn cho user_id đó
+        df.loc[df['user_id'] == user_id, 'path_labelled_file'] = image_relative_path
+    else:
+        # Thêm dòng mới nếu user_id không tồn tại
+        df = pd.concat([df, pd.DataFrame([{'user_id': user_id, 'path_labelled_file': image_relative_path}])], ignore_index=True)
+
+    # Lưu DataFrame vào file CSV
     df.to_csv(csv_file_path, index=False)
 
 @app.route('/toggle-draw', methods=['POST'])
@@ -200,137 +229,10 @@ def plot_coordinates_on_image(selected_polygon_index=None):
                     prev_point = object_points[i - 1]
                     prev_x_resized = int(prev_point['x'] * scale)
                     prev_y_resized = int(prev_point['y'] * scale)
-                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), color , 2)
+                    cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), color, 2)
 
-    _, buffer = cv2.imencode('.png', img_resized)
-    buf = io.BytesIO(buffer)
-    return buf
-
-@app.route('/delete-last', methods=['POST'])
-def delete_last_point():
-    global object_points, drawing_mode
-    if drawing_mode and object_points:
-        object_points.pop()
-    return ('', 204)
-
-@app.route('/get-objects', methods=['GET'])
-def get_objects():
-    global all_object_polygon
-    return jsonify(all_object_polygon)
-
-@app.route('/check-point', methods=['POST'])
-def check_point():
-    global all_object_polygon, scale
-    
-    data = request.json
-    click_x = data['x']
-    click_y = data['y']
-    
-    original_x = click_x / scale
-    original_y = click_y / scale
-    point = {'x': original_x, 'y': original_y}
-    
-    for i, polygon_object in enumerate(all_object_polygon):
-        polygon = polygon_object['points']
-        if is_point_inside_polygon(point, polygon):
-            return jsonify({'inside': True, 'polygon_index': i})  
-    
-    return jsonify({'inside': False})
-
-def is_point_inside_polygon(point, polygon):
-    x = point['x']
-    y = point['y']
-    inside = False
-    num_points = len(polygon)
-
-    for i in range(num_points):
-        j = (i - 1) % num_points
-        xi, yi = polygon[i]['x'], polygon[i]['y']
-        xj, yj = polygon[j]['x'], polygon[j]['y']
-
-        intersect = ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
-        if intersect:
-            inside = not inside
-
-    return inside
-
-@app.route('/delete-polygon', methods=['POST'])
-def delete_polygon():
-    data = request.json
-    polygon_index = data.get('polygon_index')
-
-    if polygon_index is not None and 0 <= polygon_index < len(all_object_polygon):
-        del all_object_polygon[polygon_index]
-        return jsonify({'success': True})
-
-    return jsonify({'success': False})
-
-@app.route('/next-image', methods=['POST'])
-def next_image():
-    global current_image_index, all_object_polygon
-    if current_image_index < len(image_files) - 1:
-        all_object_polygon = []
-        current_image_index += 1
-        return jsonify({'success': True, 'next_image': image_files[current_image_index]})
-    else:
-        return jsonify({'success': False, 'message': 'No more images.'}), 400
-
-@app.route('/highlight-class')
-def highlight_class():
-    global scale
-    try:
-        class_names = request.args.getlist('class_name')
-        dict_color = {}
-        for class_name in class_names:
-            dict_color[class_name] = (random.randint(0, 200), random.randint(0, 200), random.randint(0, 200))
-        
-        image_path = get_image_path()
-        image = cv2.imread(image_path)
-        if image is None:
-            raise FileNotFoundError("Image file not found")
-
-        img_resized = cv2.resize(image, (0, 0), fx=scale, fy=scale)
-
-        for polygon in all_object_polygon:
-            if polygon['label'] in class_names:
-                points = polygon['points']
-                points.append(points[0])
-                for i, point in enumerate(points):
-                    
-                    x_resized = int(point['x'] * scale)
-                    y_resized = int(point['y'] * scale)
-
-                    cv2.circle(img_resized, (x_resized, y_resized), 8, dict_color[polygon['label']], -1)
-
-                    if i > 0:
-                        prev_point = points[i - 1]
-                        prev_x_resized = int(prev_point['x'] * scale)
-                        prev_y_resized = int(prev_point['y'] * scale)
-                        cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), dict_color[polygon['label']], 2)
-            else:
-                points = polygon['points']
-                points.append(points[0])
-                for i, point in enumerate(points):
-                    
-                    x_resized = int(point['x'] * scale)
-                    y_resized = int(point['y'] * scale)
-
-                    cv2.circle(img_resized, (x_resized, y_resized), 8, (0, 0 , 255), -1)
-
-                    if i > 0:
-                        prev_point = points[i - 1]
-                        prev_x_resized = int(prev_point['x'] * scale)
-                        prev_y_resized = int(prev_point['y'] * scale)
-                        cv2.line(img_resized, (prev_x_resized, prev_y_resized), (x_resized, y_resized), (0, 255, 0), 2)
-                    
-
-        _, buffer = cv2.imencode('.png', img_resized)
-        buf = io.BytesIO(buffer)
-        return send_file(buf, mimetype='image/png')
-
-    except Exception as e:
-        print(f"Error: {e}")  
-        return str(e), 500  
+    _, img_encoded = cv2.imencode('.png', img_resized)
+    return io.BytesIO(img_encoded.tobytes())
 
 if __name__ == '__main__':
     app.run(debug=True)
