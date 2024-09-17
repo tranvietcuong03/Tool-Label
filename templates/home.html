@@ -299,7 +299,7 @@
 
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === ','){
+            if ( event.key === '+'){
                 fetch('/zoom', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -309,7 +309,7 @@
         });
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === '.'){
+            if ( event.key === '-'){
                 fetch('/zoom', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -319,7 +319,7 @@
         });
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === 'q'){
+            if ( event.key === 'd'){
                 if (selectedLabel){
                     drawingMode = true;
                     sendToggleDraw(true);
