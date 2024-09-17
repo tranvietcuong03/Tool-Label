@@ -5,20 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
     <style>
+        #canvas-container {
+            border: 1px solid #000;
+            overflow: auto; 
+            max-width: 90vw;    
+            position: relative;
+        }       
         canvas {
-            /* Xóa khung viền của canvas */
-            border: none;
             display: block;
-            margin: 0 5px;
+            margin: 0;
+            border: none;
+            transform-origin: top left; 
+        }      
+        #right-bar {
+            margin-left: 0;
+            border: 1px solid #000;
+            min-width: 10vw;  
+            position: relative;
+            min-height: 40vh;
         }
         #content{
             display: flex;
             flex-direction: row;
-        }
-        #right-bar{
-            margin-left: 5px;
-            border: 1px solid #000;
-            width: 20vw;
         }
         #object-header{
             text-align: center;
@@ -68,7 +76,9 @@
     </div>
 
     <div id="content">
-        <canvas id="imageCanvas"></canvas>
+        <div id="canvas-container">
+            <canvas id="imageCanvas"></canvas>
+        </div>
     
         <div id="right-bar">
             <div id="btn">
@@ -289,7 +299,7 @@
 
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === '+'){
+            if (event.ctrlKey && event.key === ','){
                 fetch('/zoom', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -299,7 +309,7 @@
         });
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.key === '-'){
+            if (event.ctrlKey && event.key === '.'){
                 fetch('/zoom', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
